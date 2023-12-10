@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Item VS Item</title>
+  <meta name="description" content="A voting game">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <meta name="keywords" content="random, api, node, express, ejs, cow, cows, facts">
+
+</head>
+
+<body>
+  <div class="container">
+    <header>
+      <img src="/img/vote.png" />
+      <div>
+        <h1>Voter</h1>
+        <p>by <a href="https://gruman.co">Matthew Gruman</a></p>
+      </div>
+    </header>
+    <h2>Which is the better fact?</h2>
+    <h3>Fact A</h3>
+    <blockquote onclick="reloadFact(0, 1)" class="one"></blockquote>
+    <h3>Fact B</h3>
+    <blockquote onclick="reloadFact(1, 0)" class="two"></blockquote>
+    <h3>Rankings</h3>
+    <h4>Fact & Score</h4>
+    <ul class="rankings"></ul>
+  </div>
+
+  <script>
+    // Initialize player and current facts
+    let player = null;
+    let facts = [];
+
+    // Function to get Elo rating changes
+    function getElo(winElo, loseElo) {
+      const length = 20; // Provide the appropriate value for length
+      let d = winElo - loseElo;
+      let elo = Math.ceil((4 * Math.sqrt(length)) / (1 + Math.pow(10, d * Math.sqrt(length / 2000))));
+
+      let d2 = loseElo - winElo;
+      let elo2 = Math.ceil((4 * Math.sqrt(length)) / (1 + Math.pow(10, -d2 * Math.sqrt(length / 2000))));
+
+      return {
+        winNewElo: winElo + elo,
+        loseNewElo: loseElo - elo2
+      };
+    }
+
+    // Function to reload the fact
+    async function reloadFact(winner, loser) {
+      let elos = getElo(facts[winner].elo, facts[loser].elo);
+      console.log(elos)
+      // Prepare data to send to the server
+      const postData = [
+        { id: facts[winner].id, elo: elos.winNewElo },
+        { id: facts[loser].id, elo: elos.loseNewElo }
+      ];
+
+
+      // Send the results to the server
+      try {
+        const response = await fetch('/vote', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(postData),
+        });
+        if (!response.ok) {
+          throw new Error('Server error');
+        }
+      } catch (error) {
+        console.error('Error sending vote results:', error);
+      }
+
+      getRankings();
+      // Reload facts for the next round
+      try {
+        const response = await fetch('http://localhost:8080/getItems');
+        const data = await response.json();
+        facts = data;
+
+        // Update the random number and fact in the DOM
+        document.querySelector('.one').innerText = data[0].fact;
+        document.querySelector('.two').innerText = data[1].fact;
+      } catch (error) {
+        console.error('Error loading facts:', error);
+      }
+    }
+
+    // Initial load of facts
+    async function initialLoad() {
+      try {
+        const response = await fetch('http://localhost:8080/getItems');
+        const data = await response.json();
+        facts = data;
+
+        // Update the random number and fact in the DOM
+        document.querySelector('.one').innerText = data[0].fact;
+        document.querySelector('.two').innerText = data[1].fact;
+      } catch (error) {
+        console.error('Error loading facts:', error);
+      }
+    }
+    function updateRankings(rankings) {
+      const rankingsList = document.querySelector('.rankings');
+
+      // Clear existing list items
+      rankingsList.innerHTML = '';
+
+      // Iterate through rankings and create list items
+      rankings.forEach((ranking) => {
+        const listItem = document.createElement('li');
+        listItem.innerHTML = `<span>${ranking.fact}</span><span>${ranking.elo}</span`;
+        rankingsList.appendChild(listItem);
+      });
+    }
+    async function getRankings() {
+      try {
+        const response = await fetch('http://localhost:8080/getAll');
+        const data = await response.json();
+
+        // Call the function to update rankings
+        updateRankings(data);
+      } catch (error) {
+        console.error('Error loading rankings:', error);
+      }
+    }
+    getRankings();
+    // Call initial load on page load
+    initialLoad();
+  </script>
+</body>
+
+</html>
